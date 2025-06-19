@@ -1,5 +1,7 @@
 import os
 import sys
+from dotenv import load_dotenv
+
 # DON'T CHANGE THIS !!!
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -30,13 +32,21 @@ from src.routes.tarefa import tarefa_bp
 from src.routes.automacao import automacao_bp
 from src.routes.dashboard import dashboard_bp
 
+# Carrega variáveis de ambiente do .env
+load_dotenv()
+
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
 app.config['SECRET_KEY'] = 'asdf#FGSgvasgf$5$WGT'
 
-# Enable CORS for all routes
+# ✅ Configuração do banco de dados PostgreSQL (via Supabase)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DATABASE_URL")
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db.init_app(app)
+
+# Ativa CORS
 CORS(app)
 
-# Register blueprints
+# Registra rotas
 app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(cliente_bp, url_prefix='/api')
 app.register_blueprint(servico_bp, url_prefix='/api')
@@ -50,53 +60,38 @@ app.register_blueprint(tarefa_bp, url_prefix='/api')
 app.register_blueprint(automacao_bp, url_prefix='/api')
 app.register_blueprint(dashboard_bp, url_prefix='/api')
 
-# Database configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db.init_app(app)
-
+# Inicializa banco e cria usuários padrão
 with app.app_context():
     db.create_all()
-    
-    # Create default users if they don't exist
+
     from src.models.user import User
     from werkzeug.security import generate_password_hash
-    
-    if not User.query.filter_by(username='laina_carmo').first():
-        admin1 = User(
-            username='laina_carmo',
-            email='laina@techmedia.com',
-            password_hash=generate_password_hash('admin123'),
-            role='admin'
-        )
-        db.session.add(admin1)
-    
-    if not User.query.filter_by(username='yuri_carmo').first():
-        admin2 = User(
-            username='yuri_carmo',
-            email='yuri@techmedia.com',
-            password_hash=generate_password_hash('admin123'),
-            role='admin'
-        )
-        db.session.add(admin2)
-    
-    if not User.query.filter_by(username='alysson_designer').first():
-        designer = User(
-            username='alysson_designer',
-            email='alysson@techmedia.com',
-            password_hash=generate_password_hash('designer123'),
-            role='designer'
-        )
-        db.session.add(designer)
-    
+
+    users = [
+        {"username": "laina_carmo", "email": "laina@techmedia.com", "password": "admin123", "role": "admin"},
+        {"username": "yuri_carmo", "email": "yuri@techmedia.com", "password": "admin123", "role": "admin"},
+        {"username": "alysson_designer", "email": "alysson@techmedia.com", "password": "designer123", "role": "designer"},
+    ]
+
+    for u in users:
+        if not User.query.filter_by(username=u["username"]).first():
+            user = User(
+                username=u["username"],
+                email=u["email"],
+                password_hash=generate_password_hash(u["password"]),
+                role=u["role"]
+            )
+            db.session.add(user)
+
     db.session.commit()
 
+# Rota para servir frontend
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve(path):
     static_folder_path = app.static_folder
     if static_folder_path is None:
-            return "Static folder not configured", 404
+        return "Static folder not configured", 404
 
     if path != "" and os.path.exists(os.path.join(static_folder_path, path)):
         return send_from_directory(static_folder_path, path)
@@ -107,7 +102,5 @@ def serve(path):
         else:
             return "index.html not found", 404
 
-
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
-
